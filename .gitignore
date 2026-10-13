@@ -1,0 +1,39 @@
+
+# macOS
+
+.DS_Store
+
+# Python
+
+__pycache__/
+
+*.py[cod]
+
+.venv/
+
+venv/
+
+# Environment / secrets
+
+.env
+
+.env.*
+
+# Jupyter
+
+.ipynb_checkpoints/
+
+# Private datasets
+
+*.xlsx
+
+*.xls
+
+*.csv
+
+# IDE
+
+.vscode/
+
+.idea/
+
