@@ -570,3 +570,220 @@ The central lesson is:
 
 **Model selection for time series should evaluate performance across time, not
 only performance on one split.**
+
+---
+
+## Testing Whether Weekday Seasonality Improves Forecasting
+
+Exploratory analysis showed differences in average realized room-night demand across weekdays.
+
+For example, total historical demand tended to be lower on Monday and Sunday and higher on Tuesday, Wednesday, and Saturday.
+
+However, observing a historical pattern does not prove that the pattern is useful for forecasting.
+
+This leads to an important distinction:
+```text
+descriptive pattern
+        ≠
+predictive signal
+```
+
+Instead of automatically adding weekday information to the forecasting model, weekday seasonality was treated as a hypothesis that needed to be validated out of sample.
+
+---
+
+## Recent-Mean Baseline vs Weekday-Aware Model
+
+The existing recent-mean model learns one value for each channel:
+
+```text
+channel
+    ↓
+mean demand during recent history
+    ↓
+same prediction for every future day
+```
+
+The weekday-aware model learns a separate historical mean for every:
+```text
+channel × weekday
+```
+
+For example:
+```text
+BookingCom × Monday
+BookingCom × Tuesday
+...
+BookingCom × Sunday
+Direct × Monday
+Direct × Tuesday
+...
+```
+
+With four channels and seven weekdays, the model can learn up to:
+```text
+4 × 7 = 28
+```
+different demand levels.
+
+The hypothesis was:
+> If weekday effects are stable and predictive, channel × weekday averages should outperform a simple channel-level recent mean.
+
+---
+
+## Keep the Experiment Fair
+
+Both models use:
+
+```text
+same target
+same modelling data
+same forecast origins
+same historical window
+same evaluation horizon
+same error metric
+```
+
+Only the forecasting assumption changes.
+
+For this experiment:
+```text
+Historical window = 3 months
+Forecast horizon   = 2 months
+```
+
+The four forecast origins were:
+```text
+2023-07-01
+2023-10-01
+2024-01-01
+2024-04-01
+```
+
+This controlled comparison makes it possible to attribute differences in performance to the weekday feature rather than to changes in the data or evaluation procedure.
+
+---
+
+
+
+## Rolling-Backtest Results
+
+Mean MAE across the four forecast origins:
+| Channel | Recent Mean | Weekday-Aware | Relative Change | Weekday Wins |
+|---|---:|---:|---:|---:|
+| BookingCom | 6.01 | 5.98 | -0.39% | 3 / 4 |
+| ChannelManager | **2.61** | 2.70 | +3.40% | 1 / 4 |
+| Direct | 4.73 | 4.67 | -1.14% | 3 / 4 |
+| Ibe | **4.67** | 4.69 | +0.57% | 2 / 4 |
+
+A negative relative change means the weekday model reduced MAE.
+
+A positive relative change means it increased MAE.
+
+![Recent mean vs weekday-aware forecasting](../images/forecasting/06_weekday_model_comparison.png)
+
+---
+
+## Why Win Count Alone Is Not Enough
+
+The weekday model beat the recent-mean baseline in several individual backtests.
+
+For example:
+```text
+BookingCom → weekday wins 3 of 4 origins
+Direct     → weekday wins 3 of 4 origins
+```
+
+That might initially appear to support the weekday model.
+
+However, the magnitude of improvement was very small.
+
+Across origins:
+```text
+BookingCom improvement ≈ 0.39%
+Direct improvement     ≈ 1.14%
+```
+
+Meanwhile, ChannelManager became approximately:
+```text
+3.40% worse
+```
+
+Therefore, model selection should not simply count how often one model beats another.
+
+The size and consistency of the improvement also matter.
+
+---
+
+## Bias-Variance Intuition
+
+A three-month historical window contains roughly:
+```text
+~91 daily observations per channel
+```
+
+The simple recent-mean model can use approximately all of those observations to estimate one channel-level demand value.
+
+After splitting by weekday:
+```text
+91 / 7 ≈ 13
+```
+observations may remain for each channel × weekday estimate.
+
+Conceptually:
+```text
+RECENT MEAN
+
+~91 observations
+      ↓
+one estimate
+      ↓
+less specific
+more stable
+
+
+WEEKDAY-AAWARE MEAN
+
+~13 observations
+per weekday
+      ↓
+seven estimates
+      ↓
+more specific
+potentially noisier
+```
+
+The weekday model has greater flexibility, but that flexibility does not automatically translate into better predictions.
+
+This is an example of the bias-variance trade-off.
+
+---
+
+## Model Decision
+
+The weekday-aware model should not replace the simpler recent-mean baseline based on the available evidence.
+
+The reasons are:
+1. Improvements for BookingCom and Direct are small.
+2. ChannelManager becomes meaningfully worse.
+3. Ibe is effectively unchanged.
+4. Additional model complexity does not produce consistent out-of-sample improvement.
+5. Only four historical forecast origins are available, so small differences should not be overinterpreted.
+
+The preferred principle is:
+> Add complexity only when it provides meaningful and repeatable out-of-sample value.
+
+This does not mean weekday effects do not exist.
+
+It means the available evidence does not show that modelling them explicitly provides enough forecasting value to justify the additional complexity.
+
+---
+
+## Interview Explanation
+
+A concise interview explanation is:
+> "EDA showed weekday differences, but I treated that as a modelling hypothesis rather than assuming seasonality would improve the forecast. I compared channel-specific weekday means against the recent-mean baseline using identical rolling-origin backtests. Weekday modelling improved mean MAE by less than 1.2% for the channels that benefited, while ChannelManager deteriorated by about 3.4%. I therefore retained the simpler baseline because the additional temporal structure did not provide consistent out-of-sample value."
+
+The broader lesson is:
+
+**Patterns discovered during EDA should be validated for predictive value before being incorporated into a forecasting model.**
