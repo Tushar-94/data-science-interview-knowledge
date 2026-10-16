@@ -787,3 +787,114 @@ A concise interview explanation is:
 The broader lesson is:
 
 **Patterns discovered during EDA should be validated for predictive value before being incorporated into a forecasting model.**
+
+---
+
+## Testing Whether Linear Trend Improves Forecasting
+
+### Hypothesis
+
+Exploratory analysis can show that demand levels move over time.
+
+A natural hypothesis is therefore:
+
+> If recent demand is increasing or decreasing, extrapolating that movement may improve the forecast.
+
+To test this hypothesis, I compared the existing recent-mean baseline with a channel-level linear-trend model.
+
+The comparison used the same:
+- target: daily realized room-night demand by channel
+- historical window: 3 months
+- forecast horizon: 2 months
+- forecast origins
+- rolling-origin evaluation framework
+- MAE metric
+
+This isolates the effect of adding trend.
+
+### Linear Trend Model
+
+For each booking channel, the model fits:
+
+\[
+\hat{y}_t = a + bt
+\]
+
+where:
+- \(a\) is the intercept
+- \(b\) is the estimated daily trend
+- \(t\) represents time
+
+The fitted trend is then extrapolated into the evaluation period.
+
+### Rolling Backtest Results
+
+| Channel | Recent Mean MAE | Trend MAE | Relative Change |
+|---|---:|---:|---:|
+| BookingCom | 6.01 | 8.65 | +43.95% |
+| ChannelManager | 2.61 | 2.96 | +13.24% |
+| Direct | 4.73 | 7.02 | +48.59% |
+| Ibe | 4.67 | 4.71 | +0.86% |
+
+Positive relative change means the trend model produced higher error.
+
+![Recent mean vs linear trend forecasting](../images/forecasting/07_trend_model_comparison.png)
+
+### Why the Trend Model Failed
+
+The estimated trends were not stable across forecast origins.
+
+For example, Direct's estimated change per 30 days moved approximately:
+```text
+2023-07-01    -0.37
+2023-10-01    +0.39
+2024-01-01    -7.71
+2024-04-01    +1.41
+```
+The model therefore interpreted temporary movements as persistent trends.
+
+At the `2024-01-01` forecast origin, **Direct’s** fitted trend produced negative future room-night predictions, including a final prediction of approximately **-17** room nights.
+
+Negative demand is not physically meaningful.
+
+A non-negativity constraint could prevent invalid predictions, but it would not solve the more fundamental problem: the estimated trend itself was unstable.
+
+---
+
+## Win Count Is Not Enough
+
+The Direct trend model beat the baseline in 2 of the 4 forecast origins.
+
+However, its average MAE increased from **4.73** to **7.02**, approximately **48.6%**.
+
+This demonstrates why model selection should not rely only on how often a model wins.
+
+The magnitude and stability of errors also matter.
+
+---
+
+## Model Decision
+
+The linear-trend model is rejected.
+
+It adds complexity but does not provide consistent out-of-sample improvement over the recent-mean baseline.
+
+The recent-mean model remains the stronger baseline because it is:
+* simpler
+* more stable
+* easier to explain
+* less sensitive to temporary changes
+* better on average across the rolling backtests
+
+---
+
+## Interview Lesson
+
+A trend visible in recent historical data should not automatically be extrapolated.
+
+> I tested whether recent linear movement contained useful predictive information using rolling-origin backtesting. The trend model produced unstable slopes, occasionally generated impossible negative demand, and increased average MAE for every channel.
+
+Therefore, I retained the simpler recent-mean approach.
+
+The broader lesson is:
+>A model should earn additional complexity through stable out-of-sample improvement, not through a better-looking fit to historical data.
