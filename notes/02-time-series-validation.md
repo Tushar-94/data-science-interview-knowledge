@@ -898,3 +898,146 @@ Therefore, I retained the simpler recent-mean approach.
 
 The broader lesson is:
 >A model should earn additional complexity through stable out-of-sample improvement, not through a better-looking fit to historical data.
+
+---
+
+## Channel-Specific History-Window Selection
+
+### Why Test Different Windows by Channel?
+
+The earlier rolling backtests showed that the amount of useful historical data differed across booking channels.
+
+Using the same history window for every channel assumes that all channels have similar stability and responsiveness.
+
+The backtests did not support that assumption.
+
+The selected configuration was:
+| Channel | History Window |
+|---|---:|
+| BookingCom | 6 months |
+| ChannelManager | 3 months |
+| Direct | 1 month |
+| Ibe | 3 months |
+
+The forecasting algorithm itself remains unchanged:
+
+\[
+\hat{y}_{c,t} = \text{mean of recent demand for channel } c
+\]
+
+Only the amount of history used to estimate that mean changes.
+
+### Common vs Channel-Specific Configuration
+
+The common baseline used a 3-month history window for every channel.
+
+| Channel | Common 3-Month MAE | Channel-Specific MAE | Relative Change |
+|---|---:|---:|---:|
+| BookingCom | 6.01 | 5.69 | -5.34% |
+| ChannelManager | 2.61 | 2.61 | 0.00% |
+| Direct | 4.73 | 3.60 | -23.93% |
+| Ibe | 4.67 | 4.67 | 0.00% |
+
+Negative relative change means lower forecast error.
+
+![Common vs channel-specific history windows](../images/forecasting/08_channel_specific_comparison.png)
+
+### Interpretation
+
+BookingCom benefited from a longer six-month history window.
+
+This suggests that additional observations helped stabilize its estimated demand level.
+
+Direct behaved differently.
+
+Its one-month history window reduced mean backtest MAE from 4.73 to 3.60, an improvement of approximately 23.9%.
+
+This suggests that older Direct observations can become stale when the channel's demand level changes.
+
+This illustrates a forecasting trade-off:
+
+
+|Short history|                         Long history|
+|-------------|-------------------------------------|
+|More responsive to recent changes    | More stable estimates|                   
+|But noisier|                     But potentially stale|
+
+---
+
+## Performance Is Not Uniform Across Origins
+
+The one-month Direct model produced MAEs of approximately:
+```txt
+2023-07-01    2.56
+2023-10-01    7.41
+2024-01-01    1.13
+2024-04-01    3.28
+```
+Therefore, the shorter window improved average historical performance but did not outperform consistently at every forecast origin.
+
+Average performance should be considered together with variability and worst-case performance.
+
+---
+
+## Model-Selection Limitation
+
+The same rolling backtests were used both to compare history windows and to select the channel-specific configuration.
+
+Therefore, the resulting backtest performance is not a fully independent estimate of future production performance.
+
+Conceptually:
+```txt
+Historical backtests
+        |
+        v
+Compare 1m / 3m / 6m
+        |
+        v
+Select configuration
+        |
+        v
+Performance reported on
+the same historical origins
+```
+This introduces model-selection optimism.
+
+With substantially more historical data, a stronger evaluation design would separate:
+```txt
+Model fitting
+     |
+     v
+Hyperparameter / model selection
+     |
+     v
+Untouched final temporal test
+```
+Because the available history is limited, the channel-specific results should be interpreted as model-selection evidence rather than proof of optimal future performance.
+
+---
+
+## Model Decision
+
+The channel-specific recent-mean configuration is selected as the working forecasting strategy:
+```txt
+BookingCom       -> 6 months
+ChannelManager   -> 3 months
+Direct           -> 1 month
+Ibe              -> 3 months
+```
+This choice is preferred over adding weekday or linear-trend complexity because it produced clearer improvements while preserving a simple and interpretable forecasting method.
+
+---
+
+## Interview Explanation
+
+> I first established a simple recent-mean baseline and then tested history-window length through rolling-origin backtesting.
+
+> The results showed that different channels had different levels of stability. BookingCom benefited from a longer six-month window, while Direct benefited substantially from using only the most recent month.
+
+> I therefore selected channel-specific history windows instead of forcing every channel to use the same configuration.
+
+> However, because the same historical backtests informed the window selection, I would treat these results as model-selection evidence rather than an unbiased final performance estimate.
+
+The broader lesson is:
+
+> Model complexity is not only about choosing a more sophisticated algorithm. Adapting a simple model to the behavior of different data segments can provide more value while remaining interpretable.
