@@ -660,3 +660,308 @@ Forecast horizon
 ```
 
 The forecast origin must be defined explicitly before model evaluation.
+
+---
+
+## 21. Building the Final 365-Day Forecast
+
+After model comparison and rolling-origin backtesting, the final forecasting
+
+strategy used channel-specific recent historical averages.
+
+The selected history windows were:
+| Channel | Historical Window |
+|---|---:|
+| BookingCom | 6 months |
+| ChannelManager | 3 months |
+| Direct | 1 month |
+| Ibe | 3 months |
+
+The forecasting algorithm itself remained deliberately simple:
+
+\[
+\hat{y}_{c,t} = \text{mean historical daily room-night demand for channel } c
+\]
+
+Only the amount of history used for each channel changed.
+
+This was preferred over adding complexity because previous experiments showed:
+- weekday-aware models produced only small and inconsistent improvements;
+- linear-trend models substantially worsened forecasting error for several channels;
+- different channels responded differently to the amount of historical data used.
+
+The final model therefore favors a simple forecasting rule whose parameters were selected using rolling historical simulations.
+
+---
+
+## 22. Define the Forecast-Time Information Boundary
+
+The final forecast starts on:
+```text
+2024-06-01
+```
+and ends on:
+```txt
+2025-05-31
+```
+
+This gives exactly 365 forecast days.
+
+Although the raw reservation-derived demand data extends to 2024-06-11, those June observations cannot be used when constructing a forecast that begins on 2024-06-01.
+
+Using them would introduce look-ahead leakage.
+
+The information boundary is therefore:
+```txt
+Latest raw demand date:          2024-06-11
+Latest allowed historical date: 2024-05-31
+Forecast origin:                 2024-06-01
+```
+A forecasting model should only use information that would genuinely have been
+available at the time the forecast was created.
+
+This distinction is important:
+```txt
+data availability date
+        !=
+model information cutoff
+        !=
+forecast horizon
+```
+
+---
+
+## 23. Final Historical Windows
+
+At the 2024-06-01 forecast origin, the selected channel models use:
+|Channel|History Start|History End|Days|Mean Daily Demand|
+|-------|-------------|-----------|----:|-----------------:|
+|BookingCom|2023-12-01|2024-05-31|183|49.86|
+|ChannelManager|2024-03-01|2024-05-31|92|11.77|
+|Direct|2024-05-01|2024-05-31|31|2.06|
+|Ibe|2024-03-01|2024-05-31|92|22.93|
+
+Missing date-channel combinations inside the accepted modelling window are represented explicitly as zero realized demand before calculating these means.
+
+This prevents zero-demand days from disappearing from the denominator.
+
+---
+
+## 24. Final Base Forecast
+
+Each selected channel mean is projected across the 365-day forecast horizon.
+
+The resulting base forecast is:
+|Channel|Average Daily Room Nights|Annual Room Nights|Share|
+|-------|------------------------:|-----------------:|----:|
+|BookingCom|49.86|18,200|57.6%|
+|ChannelManager|11.77|4,297|13.6%|
+|Direct|2.06|754|2.4%|
+|Ibe|22.93|8,371|26.5%|
+|Total|86.63|31,622|100%|
+
+![Final Base Forecast](../images/forecasting/09_final_annual_demand_forecast.png)
+
+The base-case forecast is therefore approximately:
+**31,622 realized room nights over the next 365 days.**
+
+The forecast also reveals channel concentration.
+
+BookingCom represents approximately 57.6% of forecast room nights, while BookingCom and Ibe together represent roughly 84% of forecast demand.
+
+Channel composition can matter commercially because different distribution channels may have different acquisition costs, commissions, pricing control, and customer relationships.
+
+Those financial effects should not be quantified without supporting data.
+
+---
+
+## 25. Fractional Forecasts Are Expected Values
+
+The model produces values such as:
+```txt
+BookingCom = 49.86 room nights per day
+```
+
+This does not mean that 0.86 of a physical room is sold.
+
+Forecasts represent expected values.
+
+Individual realized room-night counts are integers, while the expected value across possible future outcomes can be fractional.
+
+---
+
+## 26. Channel Error and Aggregate Error Answer Different Questions
+
+Historical channel-level backtesting showed the following approximate error relative to the final daily forecast level:
+
+|Channel|Daily Forecast|Backtest MAE|MAE / Forecast|
+|-------|-------------:|-----------:|-------------:|
+|BookingCom|49.86|5.69|11.41%|
+|ChannelManager|11.77|2.61|22.17%|
+|Direct|2.06|3.60|174.38%|
+|Ibe|22.93|4.67|20.36%|
+
+The very large percentage for Direct does not mean that future Direct demand will necessarily be wrong by 174%.
+
+Direct has low forecast volume, so even a relatively small absolute error can become extremely large when expressed as a percentage of the forecast level.
+
+This illustrates why percentage-based metrics can become unstable for low-volume series.
+
+There are also two distinct forecasting questions:
+```txt
+Channel accuracy
+    -> Is the channel mix forecast correctly?
+
+Aggregate accuracy
+    -> Is total property demand forecast correctly?
+```
+
+Errors across channels can partially offset each other at the aggregate level.
+
+Therefore good aggregate accuracy does not automatically imply good
+channel-level accuracy.
+
+---
+
+## 27. Historical Aggregate Forecast Error
+
+The selected channel-specific model was simulated at four historical forecast origins.
+
+|Forecast Origin|Predicted Total|Actual Total|Error|Error %|
+|---------------|--------------:|-----------:|----:|------:|
+|2023-07-01|4,754.81|4,905|-150.19|-3.06%|
+|2023-10-01|5,062.01|5,193|-130.99|-2.52%|
+|2024-01-01|4,688.50|5,089|-400.50|-7.87%|
+|2024-04-01|5,288.24|5,265|+23.24|+0.44%|
+
+Aggregate absolute percentage errors were:
+```txt
+Mean:    3.47%
+Median:  2.79%
+Worst:   7.87%
+```
+
+Three of the four historical simulations underpredicted total realized demand.
+
+These results show that aggregate forecasts were more stable than some individual channel forecasts because channel-level errors can partially offset one another.
+
+However, only four historical forecast origins were available, so these results should be interpreted as limited historical evidence rather than proof of future performance.
+
+---
+
+## 28. Planning Scenarios
+
+A single point forecast can create a false impression of certainty.
+
+To communicate uncertainty more transparently, three planning scenarios were created.
+
+The worst aggregate absolute percentage error observed in the historical backtests was approximately 7.87%.
+
+This was rounded to 8% and used as a transparent stress assumption around the base forecast.
+
+|Scenario|Multiplier|Annual Room Nights|Average Daily Room Nights|
+|--------|----------|-----------------:|------------------------:|
+|Downside|0.92|29,092|79.70|
+|Base|1.00|31,622|86.63|
+|Upside|1.08|34,151|93.57|
+
+The scenario range is therefore approximately:
+```txt
+29,092  <----  31,622  ---->  34,151
+Downside        Base           Upside
+```
+These values are planning scenarios.
+
+![Planning Scenarios](../images/forecasting/10_demand_scenarios.png)
+
+They are not **statistical prediction intervals** or **confidence intervals**.
+
+No probability such as 80%, 90%, or 95% should be attached to this range.
+
+---
+
+## 29. Forecast-Horizon Mismatch
+
+An important limitation remains.
+
+The rolling backtests evaluated approximately two-month forecast horizons, while the final business forecast covers 365 days.
+
+Therefore:
+```txt
+good two-month backtest performance
+
+            does NOT imply
+
+validated 365-day forecast accuracy
+```
+
+The ±8% scenario stress is informed by historical forecast errors, but the historical experiments do not establish that ±8% captures one-year forecast uncertainty.
+
+Long-horizon uncertainty may be substantially larger.
+
+A stronger production forecasting system would ideally evaluate historical forecast origins using horizons closer to the actual business horizon whenever sufficient historical data is available.
+
+---
+
+## 30. Point Forecast, Scenario, and Prediction Interval
+
+These concepts should not be used interchangeably.
+
+### Point Forecast
+
+A model’s central estimate.
+
+Example:
+```txt
+Expected annual demand = 31,622 room nights
+```
+
+### Planning Scenario
+
+A deliberately constructed alternative business outcome.
+
+Example:
+```txt
+Downside = 29,092
+Base     = 31,622
+Upside   = 34,151
+```
+
+The scenario range can be informed by historical evidence without representing a formal probability distribution.
+
+### Prediction Interval
+
+A statistically calibrated interval intended to contain a future observation with a specified probability under the model assumptions.
+
+For example, a valid 90% prediction interval would require a defensible
+uncertainty model and calibration procedure.
+
+The current analysis does not claim such an interval.
+
+---
+
+31. Interview Explanation
+
+A concise explanation of the final forecasting approach:
+
+> I first converted completed reservations into daily realized room nights by booking channel and validated the transformation mathematically. I used temporal validation and rolling-origin backtesting rather than random train-test splits. I established simple baselines, tested different history windows,
+weekday seasonality, and linear trends, and retained complexity only when it improved out-of-sample performance. The final model uses channel-specific recent-history windows because different channels showed different levels of stability. At a June 1, 2024 forecast origin, the base model estimates about 31.6 thousand realized room nights over the following 365 days. I also report downside and upside planning scenarios, while explicitly avoiding calling them prediction intervals because the available backtests use much shorter horizons than the final one-year forecast.
+
+---
+
+## 32. Key Lessons From the Final Forecast
+
+* Freeze the information set at the forecast origin.
+* Never use observations that occur after the forecast origin.
+* Validate forecast shape, missing predictions, and impossible negative values.
+* A simple model can be preferable when added complexity does not improve
+    out-of-sample performance.
+* Different segments can require different historical windows.
+* Channel-level and aggregate forecast accuracy answer different business
+    questions.
+* Low-volume series can make percentage error measures unstable.
+* A point forecast should not be presented as certainty.
+* Planning scenarios are not prediction intervals.
+* Validation horizons should resemble the actual business forecast horizon
+    whenever possible.
+* Model limitations should be communicated as clearly as model results.
